@@ -16,6 +16,14 @@ interface TickerInfo {
 
 const world = worldData as unknown as Topology<{ countries: GeometryCollection }>;
 const countries = feature(world, world.objects.countries);
+const fallbackUniverse: TickerInfo[] = [
+  { ticker: "NVDA", company: "NVIDIA Corporation", sector: "Semiconductors", exchange: "NASDAQ" },
+  { ticker: "MSFT", company: "Microsoft Corporation", sector: "Software", exchange: "NASDAQ" },
+  { ticker: "AAPL", company: "Apple Inc.", sector: "Hardware", exchange: "NASDAQ" },
+  { ticker: "AMZN", company: "Amazon.com, Inc.", sector: "Consumer / Cloud", exchange: "NASDAQ" },
+  { ticker: "GOOGL", company: "Alphabet Inc.", sector: "Internet", exchange: "NASDAQ" },
+  { ticker: "TSLA", company: "Tesla, Inc.", sector: "Automobiles", exchange: "NASDAQ" },
+];
 
 function BackdropMap() {
   const { d, sphere, grat } = useMemo(() => {
@@ -43,13 +51,14 @@ export default function Landing() {
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState(false);
   const [liveProvider, setLiveProvider] = useState<string | null>(null);
+  const [apiOffline, setApiOffline] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch("/api/tickers").then((r) => r.json()).then(setUniverse).catch(() => {});
+    fetch("/api/tickers").then((r) => r.json()).then(setUniverse).catch(() => setApiOffline(true));
     fetch("/api/health").then((r) => r.json())
       .then((h) => setLiveProvider(h.live_mode_available ? (h.live_provider ?? "live") : null))
-      .catch(() => {});
+      .catch(() => setApiOffline(true));
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "/" && document.activeElement !== inputRef.current) {
         e.preventDefault();
@@ -80,9 +89,10 @@ export default function Landing() {
 
   const matches = useMemo(() => {
     const q = query.trim().toUpperCase();
-    if (!q) return universe;
+    const base = universe.length ? universe : fallbackUniverse;
+    if (!q) return base;
     if (results) return results;
-    return universe.filter((t) =>
+    return base.filter((t) =>
       t.ticker.includes(q) || t.company.toUpperCase().includes(q));
   }, [query, universe, results]);
 
@@ -101,6 +111,7 @@ export default function Landing() {
       const { run_id, ticker: tk } = await r.json();
       nav(`/run/${run_id}?t=${tk}`);
     } catch {
+      setApiOffline(true);
       setBusy(false);
     }
   };
@@ -161,6 +172,11 @@ export default function Landing() {
             ))}
             {searching && matches.length > 0 && (
               <div className="omnibox-empty" style={{ padding: "8px 18px", fontSize: 11 }}>searching…</div>
+            )}
+            {apiOffline && (
+              <div className="omnibox-empty" style={{ padding: "8px 18px", fontSize: 11 }}>
+                Frontend deployed. Connect the FastAPI backend for live search and debates.
+              </div>
             )}
           </div>
         </div>
