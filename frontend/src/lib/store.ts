@@ -1,4 +1,5 @@
 /** SSE consumer + run state reducer. One store per run, framework-agnostic. */
+import { api } from "./api";
 import type {
   AgentId, AgentStatus, AuditCheck, Citation, ConvictionBreakdown, FeedItem,
   FootballFieldBar, GeoExposure, KeyNumber, MarketSnapshot, MonteCarloSummary,
@@ -74,7 +75,7 @@ export class RunStore {
   }
 
   connect() {
-    const es = new EventSource(`/api/runs/${this.state.runId}/events`);
+    const es = new EventSource(api(`/api/runs/${this.state.runId}/events`));
     this.es = es;
     const on = (type: string, fn: (d: any) => void) =>
       es.addEventListener(type, (ev) => fn(JSON.parse((ev as MessageEvent).data)));

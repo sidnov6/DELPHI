@@ -253,10 +253,14 @@ def _sec_matches(query: str) -> list[dict]:
             score = 0
         elif ticker.startswith(q):
             score = 1
-        elif tokens and all(t in title.lower() for t in tokens):
-            score = 2
         else:
-            continue
+            # Name tokens must PREFIX a word in the title — substring matching
+            # surfaces CheSAPeake for "sap".
+            words = title.lower().replace(",", " ").replace(".", " ").split()
+            if tokens and all(any(w.startswith(t) for w in words) for t in tokens):
+                score = 2
+            else:
+                continue
         scored.append(
             (
                 score,

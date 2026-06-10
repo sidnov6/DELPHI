@@ -4,6 +4,7 @@ import { geoNaturalEarth1, geoPath, geoGraticule10 } from "d3-geo";
 import { feature } from "topojson-client";
 import type { Topology, GeometryCollection } from "topojson-specification";
 import worldData from "world-atlas/countries-110m.json";
+import { api } from "../lib/api";
 
 interface TickerInfo {
   ticker: string;
@@ -55,8 +56,8 @@ export default function Landing() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch("/api/tickers").then((r) => r.json()).then(setUniverse).catch(() => setApiOffline(true));
-    fetch("/api/health").then((r) => r.json())
+    fetch(api("/api/tickers")).then((r) => r.json()).then(setUniverse).catch(() => setApiOffline(true));
+    fetch(api("/api/health")).then((r) => r.json())
       .then((h) => setLiveProvider(h.live_mode_available ? (h.live_provider ?? "live") : null))
       .catch(() => setApiOffline(true));
     const onKey = (e: KeyboardEvent) => {
@@ -79,7 +80,7 @@ export default function Landing() {
     setSearching(true);
     const ctl = new AbortController();
     const t = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: ctl.signal })
+      fetch(api(`/api/search?q=${encodeURIComponent(q)}`), { signal: ctl.signal })
         .then((r) => r.json())
         .then((d) => { setResults(d); setSearching(false); })
         .catch(() => { if (!ctl.signal.aborted) setSearching(false); });
@@ -102,7 +103,7 @@ export default function Landing() {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await fetch("/api/runs", {
+      const r = await fetch(api("/api/runs"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker }),

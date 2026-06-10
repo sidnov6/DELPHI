@@ -51,6 +51,8 @@ export function ConvictionGauge({ breakdown, size = 124 }:
   const filled = arcLen * (value / 100);
   const rot = 90 + (360 * (1 - sweep)) / 2;
   const tone = value >= 65 ? "var(--bull)" : value >= 40 ? "var(--saffron)" : "var(--bear)";
+  const band = breakdown == null ? "CONVICTION"
+    : value >= 70 ? "HIGH CONVICTION" : value >= 40 ? "MODERATE" : value >= 20 ? "LOW" : "SPECULATIVE";
   return (
     <svg className="chart-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       <g transform={`rotate(${rot} ${size / 2} ${size / 2})`}>
@@ -66,7 +68,7 @@ export function ConvictionGauge({ breakdown, size = 124 }:
       </text>
       <text x="50%" y="66%" textAnchor="middle"
         style={{ fontSize: 8.5, fill: "var(--ink-3)", letterSpacing: "0.18em" }}>
-        CONVICTION
+        {band}
       </text>
     </svg>
   );

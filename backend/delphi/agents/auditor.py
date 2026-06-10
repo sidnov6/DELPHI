@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .state import AuditCheck, Claim, ConvictionBreakdown, Rating, ResearchState
+from .state import AuditCheck, Claim, ResearchState
 
 _NUM = re.compile(r"(-?\$?\d+(?:\.\d+)?)\s*(%|B|bn|x|pp)?", re.IGNORECASE)
 
@@ -137,14 +137,31 @@ def run_audit(state: ResearchState, bundle: dict[str, Any],
         detail="all citation ids resolve" if not dangling else f"dangling ids: {sorted(dangling)[:4]}",
     ))
 
-    if state.rating and state.conviction:
-        consistent = _rating_consistent(state.rating, state.conviction)
+    if state.rating:
+        # Cross-figure logical consistency — per-figure tolerance alone lets a
+        # target contradict the valuation work it claims to rest on.
+        from . import analysis as _analysis
+        rating = state.rating
+        bars = _analysis.football_field(valuation)
+        if bars:
+            lo = min(b.low for b in bars)
+            hi = max(b.high for b in bars)
+            checks.append(AuditCheck(
+                name="Target within valuation evidence",
+                passed=0.95 * lo <= rating.price_target <= 1.05 * hi,
+                detail=(f"target {rating.price_target:.2f} vs evidence span "
+                        f"{lo:.0f}–{hi:.0f} across {len(bars)} methods"),
+            ))
+        prob = valuation.get("monte_carlo", {}).get("prob_upside", 0.5)
+        expected = _analysis.rating_matrix(rating.upside_pct, prob)
         checks.append(AuditCheck(
-            name="Rating consistency",
-            passed=consistent,
-            detail=(f"{state.rating.action} with conviction {state.conviction.final:.0f} "
-                    f"and upside {state.rating.upside_pct:+.1%}"),
+            name="Rating matrix consistency",
+            passed=rating.action == expected,
+            detail=(f"matrix(upside {rating.upside_pct:+.1%}, P(up) {prob:.0%}) → {expected}; "
+                    f"published {rating.action}"),
         ))
+
+    checks.append(_freshness_check(bundle))
 
     checks.append(AuditCheck(
         name="Disclosure language",
@@ -155,9 +172,24 @@ def run_audit(state: ResearchState, bundle: dict[str, Any],
     return checks, len(uncited)
 
 
-def _rating_consistent(rating: Rating, conviction: ConvictionBreakdown) -> bool:
-    if rating.action == "OVERWEIGHT" and (rating.upside_pct < 0.05 or conviction.final < 40):
-        return False
-    if rating.action == "UNDERWEIGHT" and rating.upside_pct > 0.05:
-        return False
-    return True
+def _freshness_check(bundle: dict[str, Any]) -> AuditCheck:
+    """A live-dated note must not ride a stale tape; bundled offline
+    snapshots are disclosed rather than failed."""
+    from datetime import date
+
+    as_of = bundle.get("as_of")
+    offline = bundle.get("mode_data", "snapshot") == "snapshot"
+    try:
+        age = (date.today() - date.fromisoformat(str(as_of))).days
+    except (TypeError, ValueError):
+        return AuditCheck(name="Tape freshness", passed=False,
+                          detail="snapshot date unreadable")
+    if age <= 3:
+        return AuditCheck(name="Tape freshness", passed=True,
+                          detail=f"tape as of {as_of} ({age}d old)")
+    return AuditCheck(
+        name="Tape freshness", passed=offline,
+        detail=(f"tape as of {as_of} ({age}d old) — bundled offline snapshot, disclosed"
+                if offline else
+                f"tape as of {as_of} ({age}d old) with live sources expected — stale"),
+    )

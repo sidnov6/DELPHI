@@ -193,6 +193,7 @@ class AuditCheck(BaseModel):
 class MarketSnapshot(BaseModel):
     ticker: str
     company: str
+    as_of: Optional[str] = None      # tape date — surfaced so staleness is visible
     last_price: float
     currency: str = "USD"
     market_cap_b: Optional[float] = None

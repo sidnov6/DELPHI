@@ -348,7 +348,8 @@ def _fetch_social(ticker: str, info: dict) -> dict:
         "stocktwits_sentiment": 0.55,
         "reddit_mentions_30d": 0,
         "trend_score": 50.0,
-        "short_interest_pct": round(short_pct * 100, 2) if short_pct is not None else 1.5,
+        # Percent of float, capped — Yahoo occasionally serves garbage scales.
+        "short_interest_pct": min(round(short_pct * 100, 2), 30.0) if short_pct is not None else 1.5,
         "iv_rank": 50.0,
         "summary": "no social tape for this listing — neutral prior",
     }
@@ -358,6 +359,9 @@ def _fetch_social(ticker: str, info: dict) -> dict:
         live = StockTwitsSocial().fetch(ticker)
         if live:
             social.update({k: v for k, v in live.items() if v is not None})
+            # Tiny samples produce 0%/100% skews — clamp to a credible band.
+            social["stocktwits_sentiment"] = min(max(
+                float(social.get("stocktwits_sentiment", 0.55)), 0.05), 0.95)
     except Exception:
         pass
     return social

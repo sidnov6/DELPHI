@@ -122,6 +122,7 @@ export interface AuditCheck { name: string; passed: boolean; detail: string; }
 export interface MarketSnapshot {
   ticker: string;
   company: string;
+  as_of?: string | null;
   last_price: number;
   currency: string;
   market_cap_b?: number | null;

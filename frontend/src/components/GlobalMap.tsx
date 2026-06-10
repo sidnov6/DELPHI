@@ -33,6 +33,9 @@ export function GlobalMap({ geo, detailed = false }: { geo: GeoExposure; detaile
     () => new Map(geo.regions.map((r) => [r.iso_n3.padStart(3, "0"), r])),
     [geo.regions],
   );
+  // Dynamic coverage may only know the domicile — never present that as
+  // a revenue split.
+  const domicileOnly = geo.regions.length === 1 && geo.regions[0].revenue_share >= 0.99;
   const maxShare = useMemo(
     () => Math.max(0.08, ...geo.regions.map((r) => r.revenue_share)),
     [geo.regions],
@@ -122,7 +125,7 @@ export function GlobalMap({ geo, detailed = false }: { geo: GeoExposure; detaile
         <div className="map-tip" style={{ left: tip.x, top: tip.y }}>
           <div className="nm">
             <span>{tip.region.name}</span>
-            <span className="sh">{(tip.region.revenue_share * 100).toFixed(0)}%</span>
+            <span className="sh">{domicileOnly ? "domicile" : `${(tip.region.revenue_share * 100).toFixed(0)}%`}</span>
           </div>
           {tip.region.revenue_usd_b != null && (
             <div className="num" style={{ fontSize: 11, color: "var(--ink-2)" }}>
@@ -134,7 +137,7 @@ export function GlobalMap({ geo, detailed = false }: { geo: GeoExposure; detaile
       )}
 
       <div className="map-legend">
-        <span><span className="sw" style={{ background: "var(--saffron)" }} />revenue share</span>
+        <span><span className="sw" style={{ background: "var(--saffron)" }} />{domicileOnly ? "domicile (segment data unavailable)" : "revenue share"}</span>
         <span><span className="sw" style={{ background: ARC_COLOR.supply }} />supply</span>
         <span><span className="sw" style={{ background: ARC_COLOR.demand }} />demand</span>
         <span><span className="sw" style={{ background: ARC_COLOR.risk }} />risk</span>
@@ -146,8 +149,8 @@ export function GlobalMap({ geo, detailed = false }: { geo: GeoExposure; detaile
             <div key={r.iso_n3} className="kv" style={{ padding: "8px 10px", background: "var(--surface)", borderRadius: 8, border: "1px solid var(--line-soft)" }}>
               <div className="k">{r.name}</div>
               <div className="v" style={{ color: "var(--ink)" }}>
-                {(r.revenue_share * 100).toFixed(0)}%
-                {r.revenue_usd_b != null && <span style={{ color: "var(--ink-3)", marginLeft: 6 }}>${r.revenue_usd_b.toFixed(0)}B</span>}
+                {domicileOnly ? "Domicile" : `${(r.revenue_share * 100).toFixed(0)}%`}
+                {!domicileOnly && r.revenue_usd_b != null && <span style={{ color: "var(--ink-3)", marginLeft: 6 }}>${r.revenue_usd_b.toFixed(0)}B</span>}
               </div>
             </div>
           ))}

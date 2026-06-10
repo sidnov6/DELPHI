@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -107,4 +107,11 @@ def report(run_id: str) -> dict:
 # Serve the production frontend build when present (dev uses Vite on :5173).
 _dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
 if _dist.exists():
-    app.mount("/", StaticFiles(directory=_dist, html=True), name="app")
+    @app.get("/{catchall:path}")
+    async def serve_frontend(catchall: str):
+        if catchall.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        file_path = _dist / catchall
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(_dist / "index.html")

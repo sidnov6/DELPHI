@@ -290,23 +290,33 @@ class SimDebate:
         short = soc["short_interest_pct"]
         insider = own["insider_net_shares_6m"]
 
+        signal = own["form4_signal"]
+        no_tape = signal.lower().startswith("no insider")
+        insider_clause = (
+            "There is no insider tape on this listing, so positioning carries the read alone."
+            if no_tape else
+            f"The insider tape shows {signal} — I read that as "
+            f"{'routine 10b5-1 noise' if insider < 0 else 'a quiet vote of confidence'}.")
+
         e.agent_status(a, "reading")
         await self._tool(a, "social.stream", f'symbol="{self.s.ticker}", window="30d"',
                          f"{soc['reddit_mentions_30d']:,} Reddit mentions · {bullish:.0%} bullish skew on StockTwits")
         await self._tool(a, "edgar.form4", 'window="6m"',
-                         f"net insider {'selling' if insider < 0 else 'buying'}: {abs(insider):,.0f} shares — {own['form4_signal']}")
+                         signal if no_tape else
+                         f"net insider {'selling' if insider < 0 else 'buying'}: {abs(insider):,.0f} shares — {signal}")
         e.agent_status(a, "speaking")
         await self._say(a,
             f"Positioning is {'crowded' if bullish > 0.72 else 'constructive' if bullish > 0.55 else 'skeptical'}: "
             f"{bullish:.0%} of StockTwits flow reads bullish, Reddit velocity at {soc['reddit_mentions_30d']:,} mentions "
-            f"over 30 days, short interest just {short:.1%} of float. The insider tape shows {own['form4_signal']} — "
-            f"I read that as {'routine 10b5-1 noise' if insider < 0 else 'a quiet vote of confidence'}. "
+            f"over 30 days, short interest just {short:.1f}% of float. {insider_clause} "
             f"Implied vol rank at {soc['iv_rank']:.0f} says the options market "
             f"{'is already paying up for movement' if soc['iv_rank'] > 60 else 'is not pricing a shock'}.")
 
-        self._claim(a, f"Retail skew {bullish:.0%} bullish with short interest at {short:.1%} of float",
+        self._claim(a, f"Retail skew {bullish:.0%} bullish with short interest at {short:.1f}% of float",
                     self._cite("social"), 0.7)
-        self._claim(a, f"Insiders: {own['form4_signal']} over trailing 6 months", self._cite("form4"), 0.75)
+        self._claim(a, ("No insider tape available for this listing" if no_tape else
+                        f"Insiders: {signal} over trailing 6 months"),
+                    self._cite("form4"), 0.75)
         # Deliberately uncited — the Auditor will catch this and force a REVISE loop.
         self._claim(a, "Dealer gamma positioning implies dips get bought into quarter-end", [], 0.5)
 
@@ -317,7 +327,7 @@ class SimDebate:
         view.summary = f"{'Crowded but supported' if bullish > 0.7 else 'Constructive'} — sentiment is a tailwind, not an edge"
         view.key_numbers = [
             KeyNumber(label="Bullish skew", value=f"{bullish:.0%}", tone="pos" if bullish > 0.55 else "neg"),
-            KeyNumber(label="Short interest", value=f"{short:.1%}", tone="neutral"),
+            KeyNumber(label="Short interest", value=f"{short:.1f}%", tone="neutral"),
             KeyNumber(label="IV rank", value=f"{soc['iv_rank']:.0f}", tone="neutral"),
         ]
         e.key_numbers(a, view.key_numbers)
@@ -451,7 +461,7 @@ class SimDebate:
         if soc["stocktwits_sentiment"] > 0.72:
             rules.append(dict(
                 key="crowding", target=AgentId.SENTIMENT, weight=6.0,
-                text=(f"{soc['stocktwits_sentiment']:.0%} bullish skew and {soc['short_interest_pct']:.1%} short interest "
+                text=(f"{soc['stocktwits_sentiment']:.0%} bullish skew and {soc['short_interest_pct']:.1f}% short interest "
                       f"means everyone who wants this story owns it. Sentiment isn't a tailwind at these levels — "
                       f"it's a vacuum under the price if the narrative wobbles."),
                 standing=soc["stocktwits_sentiment"] > 0.85))
@@ -536,7 +546,31 @@ class SimDebate:
     async def _rebut(self, agent: AgentId, rule: dict[str, Any]) -> tuple[str, list[str]]:
         v, b = self.v, self.b
         key = rule["key"]
-        if key in ("tv", "market", "mc"):
+        # Each objection key gets its own rebuttal — three objections must
+        # never receive the same paragraph three times.
+        if key == "tv":
+            d = v["dcf"]
+            grid = v["sensitivity"]
+            cells = [c["value"] for c in grid["cells"] if c["value"]]
+            lo, hi = (min(cells), max(cells)) if cells else (0.0, 0.0)
+            await self._tool(agent, "engine.sensitivity", "wacc ±100bps × tg 2.0–4.0%",
+                             f"grid spans {self.sym}{lo:.0f}–{self.sym}{hi:.0f}", 0.8)
+            txt = (f"Terminal weight is a property of duration, not optimism — and it's published, not hidden: "
+                   f"{d['tv_share_of_ev']:.0%} of EV with the full WACC × terminal-growth surface in the note. "
+                   f"Across ±100bps of WACC and 2–4% terminal growth the value spans {self.sym}{lo:.0f} to "
+                   f"{self.sym}{hi:.0f}; the call survives every cell that matters, and the bear case "
+                   f"{self.sym}{v['dcf_bear']['per_share']:.2f} assumes the terminal year disappoints outright.")
+            return txt, self._cite("engine")
+        if key == "mc":
+            mc = v["monte_carlo"]
+            await self._tool(agent, "engine.monte_carlo", "n=2000, seed=42 (re-read)",
+                             f"p5 {self.sym}{mc['draws_stats']['p5']:.0f} · p95 {self.sym}{mc['draws_stats']['p95']:.0f}", 0.7)
+            txt = (f"I won't argue with my own engine — {mc.get('prob_upside', 0.5):.0%} of paths above the tape "
+                   f"is exactly why the rating is where it is, not higher. The distribution is in the note: "
+                   f"p5 {self.sym}{mc['draws_stats']['p5']:.0f}, p50 {self.sym}{mc['draws_stats']['p50']:.0f}, "
+                   f"p95 {self.sym}{mc['draws_stats']['p95']:.0f}. The risk-reward is priced, not asserted.")
+            return txt, self._cite("engine")
+        if key == "market":
             bear = v["dcf_bear"]
             shock_bps = min(0.04, v["assumptions"]["ebit_margin_path"][0] * 0.35) * 10000
             await self._tool(agent, "engine.run_dcf",
@@ -573,10 +607,13 @@ class SimDebate:
             return txt, self._cite("10k", "xbrl", "estimates")
         # crowding
         soc = b["social"]
+        signal = b["ownership"]["form4_signal"]
+        insider_bit = ("and there is no insider tape on this listing to contradict it"
+                       if signal.lower().startswith("no insider")
+                       else f"and the insider tape reads {signal} — not the distribution pattern you see at tops")
         txt = (f"Crowding is real and I won't argue it away — that's why my stance is moderated, not maximal. "
-               f"But the spot checks cut against a blow-off: short interest {soc['short_interest_pct']:.1%} "
-               f"means no squeeze fuel either way, IV rank {soc['iv_rank']:.0f} isn't euphoric, and the insider "
-               f"tape is {b['ownership']['form4_signal']} — not the distribution pattern you see at tops.")
+               f"But the spot checks cut against a blow-off: short interest {soc['short_interest_pct']:.1f}% "
+               f"means no squeeze fuel either way, IV rank {soc['iv_rank']:.0f} isn't euphoric, {insider_bit}.")
         return txt, self._cite("social", "form4")
 
     # ---------------- synthesis / audit ----------------
@@ -601,7 +638,8 @@ class SimDebate:
             bear_raw = v["dcf_bear"]["per_share"]
         last = v["last_price"]
         upside = blended / last - 1
-        action = "OVERWEIGHT" if upside > 0.12 else ("UNDERWEIGHT" if upside < -0.08 else "EQUAL-WEIGHT")
+        prob = v["monte_carlo"].get("prob_upside", 0.5)
+        action = analysis.rating_matrix(upside, prob)
         bull = max(bull_raw, blended)
         bear = min(max(bear_raw, 0.1 * last), blended)
         return Rating(action=action, price_target=round(blended, 2),
@@ -657,9 +695,12 @@ class SimDebate:
             title="The business earns its growth",
             text=fund.claims[0].text + f"; quality screens ({fund.key_numbers[2].value} Piotroski) say the print is real.",
             citation_ids=fund.claims[0].citation_ids))
+        anchor_doc = ("65% engine / 35% street-consensus anchor"
+                      if street_mean is not None else "100% engine (no street tape)")
         pillars.append(ThesisPillar(
-            title="The engine, not the narrative, sets the target",
-            text=val.claims[0].text + "; comps and 2,000 Monte Carlo paths corroborate the range.",
+            title="A documented blend sets the target",
+            text=(f"Target = {anchor_doc}; the engine leg is 50% DCF, 30% comps, 20% Monte Carlo "
+                  f"median. " + val.claims[0].text + "."),
             citation_ids=val.claims[0].citation_ids))
         pillars.append(ThesisPillar(
             title="Risk is sized, not ignored",

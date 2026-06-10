@@ -1,3 +1,13 @@
+---
+title: Delphi
+emoji: 🔮
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # DELPHI — Multi-Agent Equity Research
 
 Seven agents argue over every name — four specialists, an adversary with objection

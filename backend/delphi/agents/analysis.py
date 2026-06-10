@@ -182,6 +182,21 @@ def _piotroski_inputs(f: dict[str, Any]) -> dict[str, Any]:
 
 # ---------- typed artifact builders (engine dicts → Pydantic for the wire) ----------
 
+def rating_matrix(upside: float, prob_upside: float) -> str:
+    """The documented rating thresholds — applied here AND re-derived by the
+    auditor, so the published action can never drift from the rule:
+
+        OVERWEIGHT    upside ≥ +12%  and P(upside) ≥ 40%
+        UNDERWEIGHT   upside ≤ −8%   or  P(upside) ≤ 15%
+        EQUAL-WEIGHT  everything between
+    """
+    if upside <= -0.08 or prob_upside <= 0.15:
+        return "UNDERWEIGHT"
+    if upside >= 0.12 and prob_upside >= 0.40:
+        return "OVERWEIGHT"
+    return "EQUAL-WEIGHT"
+
+
 def street_available(val: dict[str, Any]) -> bool:
     at = val.get("analyst_targets", {})
     return all(at.get(k) is not None for k in ("mean", "high", "low"))
@@ -231,6 +246,7 @@ def market_snapshot(bundle: dict[str, Any]) -> MarketSnapshot:
     return MarketSnapshot(
         ticker=bundle["ticker"], company=bundle["company"],
         currency=bundle.get("currency", "USD"),
+        as_of=bundle.get("as_of"),
         last_price=m["last_price"], market_cap_b=m.get("market_cap_b"),
         pe_fwd=m.get("pe_fwd"), ev_ebitda=m.get("ev_ebitda"),
         week52_low=m.get("week52_low"), week52_high=m.get("week52_high"),
@@ -269,4 +285,6 @@ def financial_summary(bundle: dict[str, Any], val: dict[str, Any]) -> list[KeyNu
         KeyNumber(label="Piotroski F", value=f"{pio['score']}/9",
                   tone="pos" if pio["score"] >= 6 else ("neutral" if pio["score"] >= 4 else "neg")),
         KeyNumber(label="WACC", value=f"{val['dcf']['wacc']:.1%}", tone="neutral"),
+        KeyNumber(label="Terminal growth", value=f"{val['assumptions']['terminal_growth']:.1%}",
+                  delta="base case", tone="neutral"),
     ]

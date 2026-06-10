@@ -87,6 +87,10 @@ def load_bundle(ticker: str, online: bool = True, cache: DataCache | None = None
 
     bundle["live_sources"] = live_sources
     bundle["mode_data"] = "live+snapshot" if live_sources else "snapshot"
+    if any("market" in src for src in live_sources):
+        # The tape is live — don't let the bundled snapshot date imply staleness.
+        from datetime import date
+        bundle["as_of"] = date.today().isoformat()
     return bundle
 
 

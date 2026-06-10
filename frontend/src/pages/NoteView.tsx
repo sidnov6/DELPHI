@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ResearchNote, Verdict } from "../lib/types";
 import { AGENT_META } from "../lib/types";
+import { api } from "../lib/api";
 import { ccy, fmtPct, fmtPrice } from "../lib/format";
 import { FootballField, MonteCarloChart, SensitivityHeatmap } from "../components/charts";
 import { GlobalMap } from "../components/GlobalMap";
@@ -12,14 +13,47 @@ export default function NoteView() {
   const [note, setNote] = useState<ResearchNote | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  const [pending, setPending] = useState(false);
+
   useEffect(() => {
-    fetch(`/api/runs/${runId}/report`)
-      .then(async (r) => { if (!r.ok) throw new Error((await r.json()).detail); return r.json(); })
-      .then(setNote)
-      .catch((e) => setErr(String(e.message ?? e)));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+    const load = () => {
+      fetch(api(`/api/runs/${runId}/report`))
+        .then(async (r) => {
+          if (r.status === 409) {
+            // Note not published yet — the run is still in session. Poll;
+            // never re-trigger or error a run that's simply mid-debate.
+            if (!cancelled) { setPending(true); timer = setTimeout(load, 3000); }
+            return null;
+          }
+          if (!r.ok) throw new Error((await r.json()).detail);
+          return r.json();
+        })
+        .then((d) => { if (d && !cancelled) { setPending(false); setNote(d); } })
+        .catch((e) => { if (!cancelled) setErr(String(e.message ?? e)); });
+    };
+    load();
+    return () => { cancelled = true; if (timer) clearTimeout(timer); };
   }, [runId]);
 
   if (err) return <div className="note-page"><div className="fail-banner">{err} — <Link to="/">back to the desk</Link></div></div>;
+  if (pending && !note) {
+    return (
+      <div className="note-page">
+        <div className="note-mast">
+          <Link to="/" className="wordmark">DELPHI</Link>
+          <span className="meta">INSTITUTIONAL EQUITY RESEARCH</span>
+        </div>
+        <p style={{ marginTop: 40, color: "var(--ink-2)", fontFamily: "var(--serif)", fontStyle: "italic", fontSize: 17 }}>
+          The desk is still in session — this page will update the moment the note clears audit.
+        </p>
+        <p style={{ marginTop: 14 }}>
+          <Link className="btn-ghost" to={`/run/${runId}`}>WATCH THE DEBATE →</Link>
+        </p>
+      </div>
+    );
+  }
   if (!note) return <div className="note-page"><p className="empty" style={{ color: "var(--ink-3)", fontFamily: "var(--serif)", fontStyle: "italic" }}>Setting the note…</p></div>;
 
   const verdictFor = new Map<string, Verdict>(note.verdicts.map((v) => [v.objection_id, v]));

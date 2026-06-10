@@ -91,7 +91,7 @@ export const Dossier = memo(function Dossier({ s }: { s: RunState }) {
   return (
     <aside className="dossier">
       <div className="panel">
-        <h4>Tape</h4>
+        <h4>Tape{snap?.as_of && <span style={{ float: "right", letterSpacing: "0.06em", color: "var(--ink-faint)" }}>AS OF {snap.as_of}</span>}</h4>
         {snap ? (
           <>
             <div className="snapshot-price">

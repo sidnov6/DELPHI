@@ -1,0 +1,8 @@
+.git
+.venv
+node_modules
+frontend/node_modules
+backend/.venv
+.delphi_cache.sqlite
+*.log
+.env
