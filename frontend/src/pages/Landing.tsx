@@ -52,6 +52,7 @@ export default function Landing() {
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState(false);
   const [liveProvider, setLiveProvider] = useState<string | null>(null);
+  const [runMode, setRunMode] = useState<"simulation" | "live">("simulation");
   const [apiOffline, setApiOffline] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -106,7 +107,7 @@ export default function Landing() {
       const r = await fetch(api("/api/runs"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker }),
+        body: JSON.stringify({ ticker, mode: runMode }),
       });
       if (!r.ok) throw new Error((await r.json()).detail ?? "failed");
       const { run_id, ticker: tk } = await r.json();
@@ -186,10 +187,25 @@ export default function Landing() {
       <footer className="landing-foot">
         <span>EDGAR · XBRL · yfinance · FRED · StockTwits — all free sources, cached</span>
         <span className="modes">
-          <span style={{ color: liveProvider ? "var(--bull)" : undefined }}>
-            ● LIVE {liveProvider ? `ARMED · ${liveProvider.toUpperCase()}` : "OFF"}
-          </span>
-          <span style={{ color: "var(--saffron)" }}>● SIMULATION READY</span>
+          <button
+            className="mode-pick"
+            data-selected={runMode === "live"}
+            disabled={!liveProvider}
+            onClick={() => liveProvider && setRunMode("live")}
+            title={liveProvider
+              ? "Real LLM agents — slower on free-tier rate limits"
+              : "No API key armed on the server"}
+            style={{ color: liveProvider ? "var(--bull)" : undefined }}>
+            ● LIVE {liveProvider ? `· ${liveProvider.toUpperCase()}` : "OFF"}
+          </button>
+          <button
+            className="mode-pick"
+            data-selected={runMode === "simulation"}
+            onClick={() => setRunMode("simulation")}
+            title="Data-grounded personas over the real engine — ~40s per run"
+            style={{ color: "var(--saffron)" }}>
+            ● SIMULATION
+          </button>
         </span>
       </footer>
     </div>

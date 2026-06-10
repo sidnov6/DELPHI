@@ -21,8 +21,8 @@ from .state import (
     Phase, Rating, Rebuttal, ResearchState, Thesis, ThesisPillar, Verdict,
 )
 
-# 1.0 ≈ a 45s debate. Raise to fast-forward (tests use 60), lower to savor.
-SPEED = float(os.environ.get("DELPHI_SIM_SPEED", "1.0")) * 0.72
+# 1.0 ≈ a 38s debate. Raise to fast-forward (tests use 60), lower to savor.
+SPEED = float(os.environ.get("DELPHI_SIM_SPEED", "1.0")) * 0.85
 
 CCY_SYMBOL = {"USD": "$", "EUR": "€", "GBP": "£", "CHF": "CHF ", "JPY": "¥",
               "SEK": "kr ", "NOK": "kr ", "DKK": "kr ", "CAD": "C$", "AUD": "A$", "HKD": "HK$"}

@@ -136,9 +136,15 @@ class GroqDebate(SimDebate):
 
     # ---------------- HTTP plumbing ----------------
 
+    # Total seconds a single call may spend waiting on rate limits before we
+    # give up and let the caller degrade to instant data-grounded narration.
+    # Stalling the theater for minutes is worse than a fallback turn.
+    RETRY_BUDGET_S = 16.0
+
     async def _chat(self, payload: dict[str, Any], stream: bool = False) -> httpx.Response:
         delay = 3.0
         body = ""
+        waited = 0.0
         for attempt in range(6):
             req = self.client.build_request("POST", "/chat/completions", json=payload)
             resp = await self.client.send(req, stream=stream)
@@ -156,7 +162,10 @@ class GroqDebate(SimDebate):
                         wait = float(resp.headers.get("retry-after", ""))
                     except ValueError:
                         wait = delay
-                await asyncio.sleep(min(wait, 65.0))
+                if waited + wait > self.RETRY_BUDGET_S:
+                    raise RuntimeError(f"Groq API rate-limited beyond budget: {body}")
+                await asyncio.sleep(min(wait, self.RETRY_BUDGET_S))
+                waited += wait
                 delay *= 2
                 continue
             raise RuntimeError(f"Groq API {resp.status_code}: {body}")

@@ -57,7 +57,9 @@ class Run:
         self.ticker = ticker.upper()
         self.bus = EventBus()
         self.state = ResearchState(run_id=self.id, ticker=self.ticker)
-        requested = mode or ("live" if has_live_mode() else "simulation")
+        # Simulation is the default even when a key is armed: free-tier LLM
+        # rate limits stretch live runs to minutes, so live is opt-in per run.
+        requested = mode or "simulation"
         self.mode = "live" if (requested == "live" and has_live_mode()) else "simulation"
         self.task: asyncio.Task | None = None
 
